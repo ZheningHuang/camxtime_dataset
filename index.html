@@ -1,0 +1,2271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SpaceTimePilot — Generative Rendering of Dynamic Scenes Across Space and Time</title>
+  <meta name="description" content="SpaceTimePilot: Generative Rendering of Dynamic Scenes Across Space and Time — and the CamXTime dataset of 744 scenes rendered across the full 4D camera × time grid.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #080e1b;
+      --surface:  #0e1929;
+      --surface2: #131f35;
+      --indigo:   #818cf8;
+      --cyan:     #22d3ee;
+      --pink:     #e879f9;
+      --text:     #dce7f5;
+      --muted:    #5a7399;
+      --border:   rgba(255,255,255,0.07);
+      --r:        12px;
+    }
+
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg); color: var(--text);
+      overflow-x: hidden; line-height: 1.65;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 300;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 40px; height: 56px;
+      background: rgba(8,14,27,0.75); backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+    }
+    .logo {
+      font-family: 'Playfair Display', serif; font-size: 20px; font-weight: 700;
+      background: linear-gradient(120deg, #fff 0%, var(--cyan) 60%, var(--indigo) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    nav ul { list-style: none; display: flex; gap: 28px; }
+    nav a { font-size: 13px; font-weight: 500; color: var(--muted); text-decoration: none; transition: color .2s; }
+    nav a:hover { color: var(--text); }
+
+    /* ── HERO ── */
+    #hero {
+      position: relative; min-height: 100vh;
+      display: flex; align-items: center; justify-content: center;
+      overflow: hidden;
+    }
+
+    .hero-grid {
+      position: absolute; inset: 0; z-index: 0;
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      gap: 2px; background: #000;
+    }
+    .hero-grid video {
+      width: 100%; height: 100%; object-fit: cover;
+      display: block;
+    }
+
+    /* Annotated demo tile — preview of phase captions over a single hero video */
+    .hero-tile { position: relative; width: 100%; height: 100%; overflow: hidden; }
+    .hero-tile video { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .hero-tile-caption {
+      position: absolute; left: 8px; right: 8px; top: 8px;
+      z-index: 2; pointer-events: none;
+      padding: 6px 8px; border-radius: 6px;
+      background: rgba(8,14,27,.72);
+      border: 1px solid rgba(34,211,238,.45);
+      backdrop-filter: blur(4px);
+      box-shadow: 0 4px 14px rgba(0,0,0,.45);
+      display: flex; flex-direction: column; gap: 2px;
+      transition: opacity .25s ease;
+    }
+    .hero-tile-caption .phase {
+      font-size: 10px; font-weight: 800; letter-spacing: 1.5px;
+      color: var(--cyan); text-transform: uppercase;
+    }
+    .hero-tile-caption .desc {
+      font-size: 9.5px; font-weight: 500;
+      color: rgba(255,255,255,.82);
+      letter-spacing: .3px; line-height: 1.3;
+    }
+    .hero-tile-caption .ind {
+      display: flex; gap: 8px; margin-top: 3px;
+      font-size: 9px; font-weight: 600;
+      color: rgba(255,255,255,.7); letter-spacing: .5px;
+    }
+    .hero-tile-caption .ind span { display: inline-flex; align-items: center; gap: 3px; }
+    .hero-tile-caption .ind .arr {
+      display: inline-block; min-width: 10px; text-align: center;
+      color: var(--cyan); font-weight: 800;
+    }
+
+    .hero-overlay {
+      position: absolute; inset: 0; z-index: 1;
+      background: linear-gradient(to bottom,
+        rgba(8,14,27,0.55) 0%,
+        rgba(8,14,27,0.35) 40%,
+        rgba(8,14,27,0.65) 100%);
+    }
+
+    .hero-content {
+      position: relative; z-index: 2;
+      text-align: center; padding: 100px 24px 80px;
+      max-width: 860px;
+    }
+    .hero-tag {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 5px 16px; border-radius: 100px; margin-bottom: 28px;
+      border: 1px solid rgba(34,211,238,0.3); background: rgba(34,211,238,0.06);
+      font-size: 12px; font-weight: 600; color: var(--cyan); letter-spacing: 0.5px;
+    }
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--cyan); animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+
+    h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: clamp(56px, 10vw, 100px); font-weight: 700;
+      letter-spacing: -1px; line-height: .95; margin-bottom: 20px;
+      background: linear-gradient(135deg, #fff 0%, #c7d2fe 40%, #a5f3fc 80%, #fff 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      animation: glow 4s ease-in-out infinite alternate;
+      filter: drop-shadow(0 0 30px rgba(129,140,248,.35));
+    }
+    @keyframes glow {
+      0%   { filter: drop-shadow(0 0 20px rgba(129,140,248,.3)); }
+      100% { filter: drop-shadow(0 0 50px rgba(34,211,238,.5)); }
+    }
+
+    .hero-sub {
+      font-size: clamp(14px, 2vw, 18px); color: rgba(255,255,255,.75);
+      font-weight: 300; letter-spacing: 0.08em; text-transform: uppercase;
+      margin-bottom: 6px;
+      text-shadow: 0 2px 12px rgba(0,0,0,.6);
+      display: inline-block;
+    }
+
+    .hero-divider {
+      display: flex; align-items: center; gap: 14px;
+      width: 100%; max-width: 380px; margin: 38px auto 16px;
+    }
+    .hero-divider::before,
+    .hero-divider::after {
+      content: ''; flex: 1; height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,.25), transparent);
+    }
+    .hero-divider span {
+      font-size: 11px; font-weight: 700; letter-spacing: 3px;
+      color: rgba(255,255,255,.55); text-transform: uppercase;
+    }
+    .hero-dataset-name {
+      font-family: 'Playfair Display', serif;
+      font-size: clamp(34px, 5.5vw, 60px); font-weight: 700;
+      letter-spacing: -.5px; line-height: 1;
+      background: linear-gradient(135deg, var(--cyan) 0%, #fff 50%, var(--indigo) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      margin-bottom: 18px;
+      filter: drop-shadow(0 0 24px rgba(34,211,238,.2));
+    }
+
+    .hero-badges {
+      display: flex; flex-wrap: wrap; gap: 10px;
+      justify-content: center; margin-bottom: 36px;
+    }
+    .badge {
+      padding: 6px 18px; border-radius: 100px;
+      font-size: 13px; font-weight: 600;
+      backdrop-filter: blur(8px);
+    }
+    .badge-light {
+      background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.2);
+      color: #fff;
+    }
+    .badge-cyan {
+      background: rgba(34,211,238,.12); border: 1px solid rgba(34,211,238,.3);
+      color: var(--cyan);
+    }
+
+    .hero-btns { display: flex; gap: 14px; justify-content: center; }
+    .btn-primary {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 12px 28px; border-radius: 100px;
+      background: rgba(255,255,255,.95); color: #1e1b4b;
+      font-size: 14px; font-weight: 700; text-decoration: none;
+      transition: all .2s;
+    }
+    .btn-primary:hover { background: #fff; transform: translateY(-1px); }
+    .btn-ghost {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 12px 28px; border-radius: 100px;
+      background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.25);
+      color: #fff; font-size: 14px; font-weight: 600; text-decoration: none;
+      backdrop-filter: blur(4px); transition: all .2s;
+    }
+    .btn-ghost:hover { background: rgba(255,255,255,.18); transform: translateY(-1px); }
+
+    /* scroll cue */
+    .scroll-cue {
+      position: absolute; bottom: 36px; left: 50%; transform: translateX(-50%);
+      z-index: 2; display: flex; flex-direction: column; align-items: center;
+      gap: 8px; font-size: 11px; color: rgba(255,255,255,.4); letter-spacing: 1px;
+    }
+    .scroll-cue-line {
+      width: 1px; height: 48px;
+      background: linear-gradient(to bottom, rgba(255,255,255,.4), transparent);
+      animation: scrollLine 2s ease-in-out infinite;
+    }
+    @keyframes scrollLine { 0%,100%{opacity:.5;transform:scaleY(1)} 50%{opacity:1;transform:scaleY(1.2)} }
+
+    /* ── PAPER LAYOUT (abstract + sections) ── */
+    .paper { max-width: 900px; margin: 0 auto; padding: 0 24px; }
+
+    section { padding: 80px 24px; }
+    .s-inner { max-width: 1200px; margin: 0 auto; }
+
+    .sec-num {
+      font-size: 11px; font-weight: 700; letter-spacing: 2px;
+      color: var(--indigo); text-transform: uppercase; margin-bottom: 10px;
+    }
+    h2 {
+      font-family: 'Playfair Display', serif;
+      font-size: clamp(28px, 4vw, 44px); font-weight: 700;
+      letter-spacing: -.5px; margin-bottom: 20px; line-height: 1.15;
+    }
+    .lead { font-size: 17px; color: var(--muted); line-height: 1.75; }
+
+    /* ── ABSTRACT ── */
+    #abstract { background: var(--surface); border-top: 1px solid var(--border); }
+    .abstract-grid {
+      display: grid; grid-template-columns: 1fr 260px;
+      gap: 48px; margin-top: 40px; align-items: start;
+    }
+    .abstract-text { font-size: 16px; color: var(--muted); line-height: 1.8; }
+    .abstract-text strong { color: var(--text); font-weight: 600; }
+    .stats-sidebar { display: flex; flex-direction: column; gap: 1px; background: var(--border); border-radius: var(--r); overflow: hidden; }
+    .stat-row {
+      background: var(--surface2); padding: 20px 22px;
+    }
+    .stat-row .n {
+      font-size: 32px; font-weight: 900; letter-spacing: -1px;
+      background: linear-gradient(135deg, var(--cyan), var(--indigo));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      display: block;
+    }
+    .stat-row .l { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+    /* ── FULL GRID FIGURE (Original → Full-Grid Rendering) ── */
+    .fg-figure {
+      display: grid;
+      grid-template-columns: minmax(140px, 1fr) auto minmax(280px, 2.4fr);
+      align-items: center;
+      gap: 28px;
+      margin: 40px auto 0;
+      max-width: 1100px;
+    }
+    .fg-col { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+    .fg-frame {
+      width: 100%;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #000;
+      box-shadow: 0 8px 28px rgba(0,0,0,0.18);
+      border: 1px solid var(--border);
+    }
+    .fg-frame video { display: block; width: 100%; height: auto; }
+    .fg-frame.is-original { aspect-ratio: 16 / 9; }
+    .fg-frame.is-original video { width: 100%; height: 100%; object-fit: cover; }
+    .fg-frame.is-grid     { aspect-ratio: 5 / 4; }
+    .fg-frame.is-grid video { width: 100%; height: 100%; object-fit: cover; }
+    .fg-label {
+      font-size: 13px; font-weight: 600;
+      color: var(--muted); letter-spacing: .3px;
+    }
+    .fg-arrow {
+      display: flex; align-items: center; justify-content: center;
+      color: var(--cyan);
+    }
+    .fg-arrow svg { width: 36px; height: 36px; }
+    .fg-caption {
+      text-align: center; margin-top: 24px;
+      font-size: 14px; font-style: italic;
+      color: var(--muted);
+    }
+    @media (max-width: 720px) {
+      .fg-figure {
+        grid-template-columns: 1fr;
+        gap: 16px;
+      }
+      .fg-arrow { transform: rotate(90deg); }
+    }
+
+    /* ── CONCEPT ── */
+    #concept { }
+    .concept-diagram {
+      margin-top: 48px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 18px; padding: 40px; overflow: hidden;
+    }
+    .concept-stage {
+      position: relative; width: 100%;
+      aspect-ratio: 16 / 9;
+      max-width: 760px; margin: 0 auto 24px;
+    }
+    #conceptCanvas { display:block; width:100%; height:100%; }
+    .concept-caption {
+      position: absolute; left: 0; right: 0; bottom: -32px;
+      text-align: center; font-size: 13px; font-weight: 700; color: var(--cyan);
+      letter-spacing: .5px; transition: opacity .2s;
+    }
+    .concept-grid {
+      display: flex; align-items: center; gap: 0; justify-content: center;
+    }
+    .concept-axis {
+      display: flex; flex-direction: column; gap: 8px;
+      align-items: flex-end; padding-right: 16px;
+    }
+    .concept-axis-label {
+      font-size: 11px; font-weight: 700; color: var(--indigo);
+      letter-spacing: 1px; text-transform: uppercase;
+      writing-mode: vertical-rl; transform: rotate(180deg);
+      text-align: center; height: 120px; display: flex; align-items: center;
+    }
+    .mini-grid {
+      display: grid;
+      grid-template-columns: repeat(8, 40px);
+      grid-template-rows: repeat(4, 40px);
+      gap: 4px;
+    }
+    .mini-cell {
+      border-radius: 5px; background: var(--surface2);
+      border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 7px; font-weight: 600; color: var(--muted);
+      transition: all .2s; cursor: default;
+    }
+    .mini-cell.filled { background: rgba(34,211,238,.12); border-color: rgba(34,211,238,.3); }
+    .mini-cell.highlight { background: rgba(34,211,238,.3); border-color: var(--cyan); color: var(--cyan); }
+    .axis-labels-x {
+      display: flex; justify-content: space-around;
+      margin-top: 10px; padding-left: 0;
+    }
+    .axis-labels-x span { font-size: 10px; color: var(--muted); width: 40px; text-align: center; }
+    .concept-legend {
+      display: flex; gap: 24px; margin-top: 28px; justify-content: center;
+    }
+    .legend-item { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+    .legend-dot { width: 12px; height: 12px; border-radius: 3px; }
+
+    /* ── MODES ── */
+    #modes { background: var(--surface); }
+
+    .mode-block { margin-top: 64px; }
+    .mode-block + .mode-block { margin-top: 80px; border-top: 1px solid var(--border); padding-top: 80px; }
+
+    .mode-header {
+      display: flex; align-items: center; gap: 16px; margin-bottom: 28px;
+    }
+    .mode-num {
+      width: 44px; height: 44px; border-radius: 12px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; font-weight: 900;
+    }
+    .mode-num.cyan   { background: rgba(34,211,238,.12); color: var(--cyan); }
+    .mode-num.indigo { background: rgba(129,140,248,.12); color: var(--indigo); }
+    .mode-num.pink   { background: rgba(232,121,249,.12); color: var(--pink); }
+
+    .mode-title { }
+    .mode-title h3 {
+      font-size: 24px; font-weight: 800; letter-spacing: -.4px;
+    }
+    .mode-title p { font-size: 14px; color: var(--muted); margin-top: 3px; }
+
+    /* Normal play */
+    .normal-wrap {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+    }
+    .vid-card {
+      border-radius: var(--r); overflow: hidden;
+      background: #000; border: 1px solid var(--border);
+      position: relative;
+    }
+    .vid-card video { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
+    .vid-card-label {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      padding: 24px 14px 12px;
+      background: linear-gradient(transparent, rgba(8,14,27,.9));
+      font-size: 11px; font-weight: 700; color: rgba(255,255,255,.5); letter-spacing: .5px;
+    }
+
+    /* Bullet time */
+    .bullet-wrap { }
+    .bullet-strip {
+      display: flex; gap: 8px; margin-bottom: 20px;
+    }
+    .bullet-cell {
+      flex: 1; border-radius: var(--r); overflow: hidden;
+      background: #000; border: 1px solid var(--border);
+      position: relative;
+    }
+    .bullet-cell video { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
+    .bullet-cell-lbl {
+      position: absolute; top: 8px; left: 0; right: 0; text-align: center;
+      font-size: 10px; font-weight: 700; color: rgba(255,255,255,.6); letter-spacing: .5px;
+    }
+    .bullet-cell.active-cam { border-color: var(--cyan); }
+
+    .bullet-controls {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: var(--r); padding: 20px 24px;
+      display: flex; align-items: center; gap: 20px;
+    }
+    .bullet-time-lbl {
+      font-size: 12px; font-weight: 700; color: var(--cyan); white-space: nowrap;
+      min-width: 60px;
+    }
+    #bulletScrub {
+      flex: 1; -webkit-appearance: none; appearance: none;
+      height: 4px; border-radius: 4px; outline: none; cursor: pointer;
+      background: linear-gradient(to right, var(--cyan) 50%, var(--border) 50%);
+    }
+    #bulletScrub::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 16px; height: 16px;
+      border-radius: 50%; background: var(--cyan); cursor: pointer;
+      box-shadow: 0 0 0 3px rgba(34,211,238,.2);
+    }
+    #bulletPlayBtn {
+      padding: 8px 18px; border-radius: 100px; border: none; cursor: pointer;
+      background: rgba(34,211,238,.1); border: 1px solid rgba(34,211,238,.3);
+      color: var(--cyan); font-size: 12px; font-weight: 700;
+      transition: all .15s; white-space: nowrap;
+    }
+    #bulletPlayBtn:hover { background: rgba(34,211,238,.2); }
+    .bullet-hint {
+      font-size: 13px; color: var(--muted); margin-top: 12px; text-align: center;
+    }
+
+    /* Slow motion */
+    .slowmo-wrap {
+      display: grid; grid-template-columns: 2fr 1fr; gap: 24px; align-items: start;
+    }
+    .slowmo-vid {
+      border-radius: var(--r); overflow: hidden; background: #000;
+      border: 1px solid var(--border); position: relative;
+    }
+    .slowmo-vid video { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
+    .slowmo-speed-badge {
+      position: absolute; top: 14px; right: 14px;
+      background: rgba(0,0,0,.65); backdrop-filter: blur(8px);
+      border: 1px solid var(--border); border-radius: 100px;
+      padding: 5px 14px; font-size: 13px; font-weight: 800;
+      color: var(--pink);
+    }
+    .slowmo-controls { }
+    .ctrl-heading { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; color: var(--muted); text-transform: uppercase; margin-bottom: 14px; }
+    .speed-btns { display: flex; flex-direction: column; gap: 8px; }
+    .speed-btn {
+      padding: 14px 20px; border-radius: 10px; cursor: pointer;
+      border: 1px solid var(--border); background: var(--surface2);
+      color: var(--muted); font-size: 14px; font-weight: 700;
+      transition: all .15s; text-align: left; display: flex; align-items: center; gap: 12px;
+    }
+    .speed-btn:hover { border-color: rgba(232,121,249,.4); color: var(--text); }
+    .speed-btn.active { background: rgba(232,121,249,.08); border-color: rgba(232,121,249,.4); color: var(--pink); }
+    .speed-btn .desc { font-size: 11px; font-weight: 400; color: var(--muted); margin-left: auto; }
+    .speed-btn.active .desc { color: rgba(232,121,249,.6); }
+
+    /* ── EXPLORER ── */
+    #explorer { }
+    .exp-outer {
+      display: grid; grid-template-columns: minmax(0, 460px) 380px;
+      gap: 28px; margin-top: 48px; align-items: start;
+      justify-content: center;
+    }
+    .exp-frame-box {
+      aspect-ratio: 1; border-radius: var(--r); overflow: hidden;
+      background: #000; border: 1px solid var(--border); position: relative;
+    }
+    /* canvas-based frame display — one canvas, draws current frame from sprite strips */
+    .exp-frame-box canvas#frameCanvas { position:absolute; inset:0; width:100%; height:100%; display:block; background:#000; }
+    .frame-loader { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; background:var(--surface); z-index:10; font-size:13px; font-weight:600; color:var(--muted); }
+    .frame-loader-bar { width:160px; height:2px; background:var(--border); border-radius:2px; overflow:hidden; }
+    .frame-loader-fill { height:100%; background:var(--cyan); width:0%; transition:width .1s; }
+    .exp-badge {
+      position: absolute; top: 14px;
+      background: rgba(0,0,0,.65); backdrop-filter: blur(8px);
+      border: 1px solid var(--border); border-radius: 100px;
+      padding: 4px 12px; font-size: 12px; font-weight: 700;
+    }
+    .exp-cam { left: 14px; color: var(--cyan); }
+    .exp-time { right: 14px; color: var(--indigo); }
+    .exp-ctrl { display: flex; flex-direction: column; gap: 18px; }
+    .ctrl-group { }
+    .ctrl-lbl { font-size: 10px; font-weight: 700; letter-spacing: 1.8px; color: var(--muted); text-transform: uppercase; margin-bottom: 8px; }
+    .pill-row { display: flex; flex-wrap: wrap; gap: 6px; }
+    .pill {
+      padding: 5px 12px; border-radius: 100px; cursor: pointer;
+      border: 1px solid var(--border); background: var(--surface2);
+      font-size: 12px; font-weight: 500; color: var(--muted); transition: all .15s;
+    }
+    .pill:hover { color: var(--text); border-color: rgba(34,211,238,.4); }
+    .pill.sel { background: rgba(34,211,238,.08); border-color: rgba(34,211,238,.5); color: var(--cyan); }
+    .traj-g { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .traj-b {
+      padding: 9px 8px; border-radius: 9px; cursor: pointer; text-align: center;
+      border: 1px solid var(--border); background: var(--surface2);
+      font-size: 11px; font-weight: 600; color: var(--muted); transition: all .15s;
+    }
+    .traj-b:hover { color: var(--text); border-color: rgba(129,140,248,.4); }
+    .traj-b.sel { background: rgba(129,140,248,.1); border-color: rgba(129,140,248,.5); color: var(--indigo); }
+    .pat-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+    .pat-btn {
+      padding: 8px 4px; border-radius: 8px; cursor: pointer; text-align: center;
+      border: 1px solid var(--border); background: var(--surface2);
+      font-size: 11px; font-weight: 600; color: var(--muted);
+      transition: all .15s; font-family: inherit;
+    }
+    .pat-btn:hover { color: var(--text); border-color: rgba(34,211,238,.4); }
+    .pat-btn.active { background: rgba(34,211,238,.1); border-color: rgba(34,211,238,.5); color: var(--cyan); }
+    .pad-outer {
+      width: 100%; aspect-ratio: 1;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: var(--r); position: relative; cursor: crosshair;
+      overflow: hidden; touch-action: none; user-select: none;
+    }
+    #padCanvas {
+      position: absolute; inset: 0;
+      width: 100% !important; height: 100% !important;
+    }
+    .pad-cursor-dot {
+      position: absolute; width: 16px; height: 16px; border-radius: 50%;
+      background: var(--cyan); pointer-events: none; transform: translate(-50%,-50%);
+      box-shadow: 0 0 0 4px rgba(34,211,238,.15), 0 0 16px rgba(34,211,238,.5);
+      z-index: 2;
+    }
+    .pad-x-label {
+      position: absolute; bottom: 6px; left: 0; right: 0; text-align: center;
+      font-size: 9px; font-weight: 700; color: rgba(34,211,238,.45);
+      letter-spacing: 1.5px; pointer-events: none; z-index: 3;
+    }
+    .pad-y-label {
+      position: absolute; left: 5px; top: 0; bottom: 0; display: flex; align-items: center;
+      font-size: 9px; font-weight: 700; color: rgba(129,140,248,.45);
+      letter-spacing: 1.5px; pointer-events: none; z-index: 3;
+      writing-mode: vertical-rl; transform: rotate(180deg);
+    }
+    .action-row { display: flex; gap: 6px; margin-top: 10px; }
+    .action-btn {
+      flex: 1; padding: 10px 6px; border-radius: 8px; cursor: pointer; text-align: center;
+      border: 1px solid var(--border); background: var(--surface2);
+      font-size: 11px; font-weight: 700; color: var(--muted);
+      transition: all .15s; font-family: inherit;
+    }
+    .action-btn:hover { color: var(--text); border-color: rgba(34,211,238,.4); }
+    .action-btn.active { background: rgba(34,211,238,.08); border-color: rgba(34,211,238,.45); color: var(--cyan); }
+    .action-btn.ghost { color: rgba(255,255,255,.25); }
+    .action-btn.ghost:hover { color: var(--muted); }
+    .action-btn.accent { background: rgba(129,140,248,.12); border-color: rgba(129,140,248,.45); color: var(--indigo); }
+    .action-btn.accent:hover { background: rgba(129,140,248,.2); border-color: var(--indigo); color: #c7d2fe; }
+    .action-btn.accent.busy { opacity:.6; cursor:wait; }
+
+    /* rendered video overlay */
+    .exp-video-layer {
+      position: absolute; inset: 0; z-index: 5; background: #000;
+      display: none;
+    }
+    .exp-video-layer.show { display: flex; align-items: center; justify-content: center; }
+    .exp-video-layer video { width: 100%; height: 100%; object-fit: cover; }
+    .exp-video-layer .close-vid {
+      position: absolute; top: 10px; right: 10px; z-index: 6;
+      background: rgba(0,0,0,.7); border: 1px solid var(--border);
+      border-radius: 100px; color: var(--muted); font-size: 12px;
+      font-weight: 700; padding: 4px 10px; cursor: pointer;
+      font-family: inherit;
+    }
+    .exp-video-layer .close-vid:hover { color: var(--text); }
+    .render-status {
+      font-size: 11px; color: var(--muted); margin-top: 6px;
+      min-height: 16px; text-align: center;
+    }
+
+    /* ── SCENE MATRIX ── */
+    #matrix { background: var(--surface); border-top: 1px solid var(--border); }
+    .matrix-list {
+      display: flex; flex-direction: column; gap: 14px;
+      margin-top: 40px;
+    }
+    .matrix-card {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: var(--r); overflow: hidden;
+      transition: border-color .2s;
+    }
+    .matrix-card.open { border-color: rgba(34,211,238,.35); }
+    .matrix-head {
+      display: grid; grid-template-columns: 160px 1fr auto;
+      gap: 20px; align-items: center; padding: 14px 18px 14px 14px;
+      cursor: pointer; user-select: none;
+      transition: background .2s;
+    }
+    .matrix-head:hover { background: rgba(255,255,255,.02); }
+    .matrix-thumb {
+      width: 160px; aspect-ratio: 1; border-radius: 8px;
+      overflow: hidden; background: #000; flex-shrink: 0;
+    }
+    .matrix-thumb video { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .matrix-meta h3 {
+      font-size: 22px; font-weight: 800; letter-spacing: -.3px;
+      margin-bottom: 4px;
+    }
+    .matrix-meta .matrix-sub {
+      font-size: 13px; color: var(--muted);
+    }
+    .matrix-meta .matrix-tags {
+      display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px;
+    }
+    .matrix-tag {
+      font-size: 10px; font-weight: 700; letter-spacing: .5px;
+      padding: 3px 9px; border-radius: 100px;
+      background: rgba(129,140,248,.1); border: 1px solid rgba(129,140,248,.25);
+      color: var(--indigo);
+    }
+    .matrix-tag.cyan {
+      background: rgba(34,211,238,.08); border-color: rgba(34,211,238,.25);
+      color: var(--cyan);
+    }
+    .matrix-toggle {
+      padding: 8px 18px; border-radius: 100px; cursor: pointer;
+      border: 1px solid var(--border); background: rgba(0,0,0,.2);
+      color: var(--muted); font-size: 12px; font-weight: 700;
+      font-family: inherit; white-space: nowrap;
+      transition: all .15s;
+    }
+    .matrix-toggle:hover { color: var(--text); border-color: rgba(34,211,238,.4); }
+    .matrix-card.open .matrix-toggle {
+      background: rgba(34,211,238,.1); border-color: rgba(34,211,238,.4); color: var(--cyan);
+    }
+    .matrix-toggle .arrow { display: inline-block; transition: transform .25s; }
+    .matrix-card.open .matrix-toggle .arrow { transform: rotate(180deg); }
+
+    .matrix-body {
+      max-height: 0; overflow: hidden;
+      transition: max-height .35s ease;
+      border-top: 1px solid transparent;
+    }
+    .matrix-card.open .matrix-body {
+      max-height: 2000px; border-top-color: var(--border);
+    }
+    .matrix-body-inner {
+      padding: 22px 22px 26px;
+      overflow-x: auto;
+    }
+    .matrix-grid {
+      display: grid;
+      grid-template-columns: 130px repeat(4, minmax(130px, 1fr));
+      gap: 6px;
+      min-width: 660px;
+    }
+    .matrix-col-h, .matrix-row-h {
+      font-size: 10px; font-weight: 700; letter-spacing: 1.2px;
+      color: var(--muted); text-transform: uppercase;
+      display: flex; align-items: center; justify-content: center;
+      padding: 4px;
+    }
+    .matrix-col-h { color: var(--indigo); }
+    .matrix-row-h { color: var(--cyan); justify-content: flex-end; padding-right: 10px; }
+    .matrix-row-h--red { color: #f87171; }
+    .matrix-cell--red { border-color: rgba(248,113,113,.45); box-shadow: 0 0 0 1px rgba(248,113,113,.18); }
+    .matrix-corner { background: transparent; }
+    .matrix-cell {
+      aspect-ratio: 1; border-radius: 8px; overflow: hidden;
+      background: #000; border: 1px solid var(--border);
+      position: relative;
+    }
+    .matrix-cell video { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .matrix-cell.missing {
+      display: flex; align-items: center; justify-content: center;
+      background: var(--surface);
+    }
+    .matrix-cell.missing video { display: none; }
+    .matrix-cell.missing::after {
+      content: 'render pending';
+      font-size: 9px; font-weight: 600; letter-spacing: .5px;
+      color: var(--muted); text-align: center; padding: 0 6px;
+    }
+    @media (max-width: 700px) {
+      .matrix-head { grid-template-columns: 88px 1fr; gap: 12px; padding: 10px; }
+      .matrix-thumb { width: 88px; }
+      .matrix-toggle { grid-column: 1 / -1; justify-self: stretch; text-align: center; }
+      .matrix-meta h3 { font-size: 18px; }
+      .matrix-meta .matrix-tags { display: none; }
+    }
+
+    /* ── TEAM ── */
+    #team { border-top: 1px solid var(--border); }
+    .team-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px; margin-top: 40px;
+    }
+    .team-card {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: var(--r); padding: 22px 18px 20px;
+      text-align: center; text-decoration: none; color: inherit;
+      transition: border-color .2s, transform .2s;
+      display: flex; flex-direction: column; align-items: center;
+    }
+    .team-card:hover { border-color: rgba(34,211,238,.4); transform: translateY(-2px); }
+    .team-photo {
+      width: 96px; height: 96px; border-radius: 50%;
+      overflow: hidden; background: #000; margin-bottom: 14px;
+      border: 2px solid var(--border);
+    }
+    .team-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .team-name {
+      font-size: 14px; font-weight: 700; color: var(--text);
+      margin-bottom: 6px; letter-spacing: -.2px;
+    }
+    .team-role {
+      font-size: 11px; font-weight: 600; letter-spacing: 1px;
+      color: var(--muted); text-transform: uppercase;
+    }
+    @media (max-width: 900px) {
+      .team-grid { grid-template-columns: repeat(3, 1fr); }
+    }
+    @media (max-width: 600px) {
+      .team-grid { grid-template-columns: repeat(2, 1fr); }
+      .team-photo { width: 76px; height: 76px; }
+    }
+
+    /* ── GALLERY MARQUEE ── */
+    #gallery { overflow: hidden; padding: 80px 0; background: var(--surface); }
+    .gallery-header { text-align: center; padding: 0 24px; margin-bottom: 28px; }
+    .gallery-tabs {
+      display: flex; flex-wrap: wrap; justify-content: center;
+      gap: 8px; padding: 0 24px; margin-bottom: 36px;
+    }
+    .gallery-tab {
+      padding: 8px 18px; border-radius: 100px; cursor: pointer;
+      border: 1px solid var(--border); background: var(--surface2);
+      font-size: 13px; font-weight: 600; color: var(--muted);
+      transition: all .15s; font-family: inherit;
+    }
+    .gallery-tab:hover { color: var(--text); border-color: rgba(34,211,238,.4); }
+    .gallery-tab.active {
+      background: rgba(34,211,238,.1);
+      border-color: rgba(34,211,238,.5);
+      color: var(--cyan);
+    }
+    .marquee-wrap { display: flex; flex-direction: column; gap: 10px; }
+    .marquee-row { display: flex; gap: 10px; overflow: hidden; }
+    .marquee-track {
+      display: flex; gap: 10px; flex-shrink: 0;
+      animation: marqueeL 100s linear infinite;
+    }
+    .marquee-row.rev .marquee-track { animation: marqueeR 80s linear infinite; }
+    @keyframes marqueeL { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
+    @keyframes marqueeR { 0%{transform:translateX(-50%)} 100%{transform:translateX(0)} }
+    .marquee-cell {
+      width: 240px; height: 240px; flex-shrink: 0;
+      border-radius: 12px; overflow: hidden; background: #000;
+      border: 1px solid var(--border);
+    }
+    .marquee-cell video { width: 100%; height: 100%; object-fit: cover; display: block; }
+    @media (max-width: 600px) {
+      .marquee-cell { width: 170px; height: 170px; }
+    }
+
+    /* ── FOOTER ── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 40px; text-align: center;
+    }
+    .foot-logo {
+      font-family: 'Playfair Display', serif; font-size: 22px; font-weight: 700;
+      background: linear-gradient(120deg, var(--cyan), var(--indigo));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      display: block; margin-bottom: 12px;
+    }
+    footer p { font-size: 13px; color: var(--muted); }
+
+    /* ── FADE-IN ── */
+    .fade { opacity:0; transform:translateY(20px); transition: opacity .7s, transform .7s; }
+    .fade.in { opacity:1; transform:none; }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 900px) {
+      .hero-grid { grid-template-columns: repeat(3,1fr); grid-template-rows: repeat(6,1fr); }
+      .abstract-grid { grid-template-columns: 1fr; }
+      .stats-sidebar { flex-direction: row; flex-wrap: wrap; }
+      .stat-row { flex: 1 1 120px; }
+      .normal-wrap { grid-template-columns: 1fr; }
+      .slowmo-wrap { grid-template-columns: 1fr; }
+      .explorer-layout { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 600px) {
+      nav ul { gap: 16px; }
+      .bullet-strip { gap: 5px; }
+      .hero-grid { grid-template-columns: repeat(2,1fr); grid-template-rows: repeat(9,1fr); }
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="logo">SpaceTimePilot</div>
+  <ul>
+    <li><a href="https://zheninghuang.github.io/Space-Time-Pilot/" target="_blank" rel="noopener">Paper</a></li>
+    <li><a href="#abstract">Dataset</a></li>
+    <li><a href="#concept">Concept</a></li>
+    <li><a href="#matrix">Matrix</a></li>
+    <li><a href="#explorer">Explorer</a></li>
+    <li><a href="#gallery">Gallery</a></li>
+    <li><a href="#team">Team</a></li>
+    <li><a href="#download">Request</a></li>
+    <li><a href="#citation">Citation</a></li>
+  </ul>
+</nav>
+
+<!-- HERO -->
+<section id="hero">
+  <div class="hero-grid" id="heroGrid"></div>
+  <div class="hero-overlay"></div>
+  <div class="hero-content">
+    <div class="hero-tag"><span class="dot"></span>Paper · arXiv:2512.25075</div>
+    <h1>SpaceTimePilot</h1>
+    <div class="hero-sub">Generative Rendering of Dynamic Scenes<br>Across Space and Time</div>
+    <div class="hero-divider"><span>Dataset</span></div>
+    <div class="hero-dataset-name">CamXTime</div>
+    <div class="hero-badges">
+      <span class="badge badge-cyan">SpaceTime Dataset</span>
+      <span class="badge badge-light">120 × 120 Grid</span>
+      <span class="badge badge-light">360K+ Videos</span>
+      <span class="badge badge-light">3K+ Trajectories</span>
+    </div>
+    <div class="hero-btns">
+      <a href="https://zheninghuang.github.io/Space-Time-Pilot/" target="_blank" rel="noopener" class="btn-primary">
+        <svg width="15" height="15" fill="none" viewBox="0 0 15 15"><path d="M3 1.5h6.5L12.5 4.5V13.5H3V1.5Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M9.5 1.5V4.5h3" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+        Read the Paper
+      </a>
+      <a href="https://arxiv.org/abs/2512.25075" target="_blank" rel="noopener" class="btn-ghost">
+        arXiv
+      </a>
+      <a href="#explorer" class="btn-ghost">
+        <svg width="15" height="15" fill="none" viewBox="0 0 15 15"><circle cx="7.5" cy="7.5" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M7.5 4v3.5l2 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        Explore Dataset
+      </a>
+    </div>
+  </div>
+  <div class="scroll-cue">
+    <div class="scroll-cue-line"></div>
+    SCROLL
+  </div>
+</section>
+
+<!-- ABSTRACT -->
+<section id="abstract">
+  <div class="s-inner paper">
+    <div class="fade">
+      <div class="sec-num">Overview</div>
+      <h2>SpaceTimePilot &amp; the CamXTime Dataset</h2>
+    </div>
+    <div class="abstract-grid fade">
+      <div class="abstract-text">
+        <p><strong><a href="https://zheninghuang.github.io/Space-Time-Pilot/" target="_blank" rel="noopener" style="color: var(--cyan); text-decoration: none;">SpaceTimePilot</a></strong> is a method for
+        <strong>generative rendering of dynamic scenes across space and time</strong> — letting a model synthesize
+        any view at any moment of a 4D scene. To train and evaluate it, we built <strong>CamXTime</strong>:
+        the first dataset to provide <strong>full grid rendering</strong> of dynamic 3D scenes —
+        rendering the complete motion at <strong>every single camera pose</strong> along every trajectory.
+        For each of our 744 dynamic scenes, we define 4 distinct camera trajectories, and for each trajectory
+        we render the full scene animation from all 120 individual camera positions.</p>
+        <br>
+        <p>This produces a <strong>120 × 120 rendering grid</strong> per scene: one axis is the camera pose
+        within its trajectory, the other is time. Any cell in this grid is a fully rendered, 30fps video.
+        This structure enables unique operations impossible with standard video datasets —
+        <strong>bullet-time</strong> (freeze time, sweep camera), <strong>slow motion</strong> at arbitrary
+        time positions, and full <strong>4D free navigation</strong>.</p>
+        <br>
+        <p>All videos are rendered at <strong>1080 × 1080 · 30 fps</strong>.</p>
+      </div>
+      <div class="stats-sidebar">
+        <div class="stat-row">
+          <span class="n">744</span>
+          <div class="l">Training scenes</div>
+        </div>
+        <div class="stat-row">
+          <span class="n">4</span>
+          <div class="l">Trajectories per scene</div>
+        </div>
+        <div class="stat-row">
+          <span class="n">120</span>
+          <div class="l">Videos per trajectory</div>
+        </div>
+        <div class="stat-row">
+          <span class="n">360,960</span>
+          <div class="l">Total rendered videos</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CONCEPT -->
+<section id="concept">
+  <div class="s-inner paper">
+    <div class="fade">
+      <div class="sec-num">Key Concept</div>
+      <h2>The Full Grid</h2>
+      <p class="lead">Standard video datasets give you one camera path per scene. CamXTime renders every
+      camera pose × every time step — the complete 4D rendering grid.</p>
+    </div>
+    <div class="fg-figure fade">
+      <div class="fg-col">
+        <div class="fg-frame is-original">
+          <video src="./merged_05.mp4"
+                 muted loop playsinline preload="auto" autoplay></video>
+        </div>
+        <div class="fg-label">Original Video</div>
+      </div>
+      <div class="fg-arrow" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="12" x2="20" y2="12"/>
+          <polyline points="13 5 20 12 13 19"/>
+        </svg>
+      </div>
+      <div class="fg-col">
+        <div class="fg-frame is-grid">
+          <video src="./grid_all_cam_lo.mp4"
+                 muted loop playsinline preload="auto" autoplay></video>
+        </div>
+        <div class="fg-label">Full-Grid Rendering</div>
+      </div>
+    </div>
+    <div class="fg-caption fade">We do this for all captured animations.</div>
+    <div class="concept-diagram fade">
+      <div class="concept-stage" id="conceptStage">
+        <canvas id="conceptCanvas"></canvas>
+        <div class="concept-caption" id="conceptCaption">Phase 1 — Define camera trajectory</div>
+      </div>
+      <div class="concept-legend">
+        <div class="legend-item">
+          <div class="legend-dot" style="background:var(--surface2); border:1px solid var(--border);"></div>
+          Empty cell
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:rgba(129,140,248,.45); border:1px solid var(--indigo);"></div>
+          Camera pose defined
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:rgba(34,211,238,.5); border:1px solid var(--cyan);"></div>
+          Frame rendered
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- SCENE MATRIX -->
+<section id="matrix">
+  <div class="s-inner paper" style="max-width: 1100px;">
+    <div class="fade">
+      <div class="sec-num">Sample Paths</div>
+      <h2>Six example traversals through the grid</h2>
+      <p class="lead">
+        Six sample paths through each scene's <strong style="color:var(--indigo)">camera × time grid</strong>,
+        rendered along all <strong style="color:var(--indigo)">4 trajectories</strong>. Tap a card to expand.
+      </p>
+    </div>
+    <div class="matrix-list fade" id="matrixList"></div>
+  </div>
+</section>
+
+<!-- INTERACTIVE EXPLORER -->
+<section id="explorer">
+  <div class="s-inner">
+    <div class="fade paper">
+      <div class="sec-num">Interactive 4D Navigator</div>
+      <h2>Draw your own path<br>through space-time</h2>
+      <p class="lead">
+        Horizontal axis is <strong style="color:var(--cyan)">time</strong>,
+        vertical axis is <strong style="color:var(--indigo)">camera position</strong>.
+        Draw any path on the pad and play it back — or pick a predefined pattern below.
+      </p>
+    </div>
+    <div class="exp-outer fade">
+      <div>
+        <div class="exp-frame-box" id="expFrameBox">
+          <canvas id="frameCanvas"></canvas>
+          <div class="frame-loader" id="frameLoader">
+            <span>Preloading 40×40 grid…</span>
+            <div class="frame-loader-bar"><div class="frame-loader-fill" id="frameLoaderFill"></div></div>
+            <span id="frameLoaderCount" style="font-size:11px">0 / 40</span>
+          </div>
+          <div class="exp-badge exp-cam" id="expCamBadge">cam060</div>
+          <div class="exp-badge exp-time" id="expTimeBadge">t=060</div>
+        </div>
+      </div>
+      <div class="exp-ctrl">
+        <div class="ctrl-group">
+          <div class="ctrl-lbl">Scene</div>
+          <div class="pill-row" id="expScenes"></div>
+        </div>
+        <div class="ctrl-group" id="expTrajGroup">
+          <div class="ctrl-lbl">Camera Trajectory</div>
+          <div class="traj-g" id="expTrajs"></div>
+        </div>
+        <div class="ctrl-group">
+          <div class="ctrl-lbl">Predefined Patterns</div>
+          <div class="pat-grid">
+            <button class="pat-btn" data-pat="forward">⟋ Forward</button>
+            <button class="pat-btn" data-pat="slow">◐ Slow Motion</button>
+            <button class="pat-btn" data-pat="bullet">— Bullet Time</button>
+            <button class="pat-btn" data-pat="fast">≫ Fast Motion</button>
+            <button class="pat-btn" data-pat="fwdBullet">⤤⤥ Fwd · Bullet · Fwd</button>
+            <button class="pat-btn" data-pat="zigzag">⌇ Zigzag</button>
+          </div>
+        </div>
+        <div class="ctrl-group">
+          <div class="ctrl-lbl">Draw your path — time (x) × camera (y)</div>
+          <div class="pad-outer" id="padOuter">
+            <canvas id="padCanvas"></canvas>
+            <div class="pad-cursor-dot" id="padCursor" style="left:50%;top:50%"></div>
+            <div class="pad-x-label">← TIME →</div>
+            <div class="pad-y-label">CAMERA</div>
+          </div>
+          <div class="action-row">
+            <button class="action-btn active" id="drawBtn">✏ Drawing</button>
+            <button class="action-btn accent" id="playBtn">▶ Play Path</button>
+            <button class="action-btn ghost" id="clearBtn">✕ Clear</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- GALLERY -->
+<section id="gallery">
+  <div class="gallery-header fade">
+    <div class="sec-num" style="text-align:center">Dataset Gallery</div>
+    <h2>Example Scenes</h2>
+    <p class="lead" style="max-width:620px; margin:0 auto;">A curated selection of scenes. Pick a space-time pattern below — each tab traces a different path through the camera × time grid.</p>
+  </div>
+  <div class="gallery-tabs fade" id="galleryTabs">
+    <button class="gallery-tab active" data-pat="forward">⟋ Forward</button>
+    <button class="gallery-tab" data-pat="slow">◐ Slow Motion</button>
+    <button class="gallery-tab" data-pat="bullet">— Bullet Time</button>
+    <button class="gallery-tab" data-pat="fast">≫ Fast Motion</button>
+    <button class="gallery-tab" data-pat="fwdBullet">⤤⤥ Fwd · Bullet · Fwd</button>
+    <button class="gallery-tab" data-pat="zigzag">⌇ Zigzag</button>
+  </div>
+  <div class="marquee-wrap" id="marqueeWrap"></div>
+</section>
+
+<!-- TEAM -->
+<section id="team">
+  <div class="s-inner paper" style="max-width: 1100px;">
+    <div class="fade" style="text-align:center;">
+      <div class="sec-num">Team</div>
+      <h2>All team members</h2>
+    </div>
+    <div class="team-grid fade">
+      <a class="team-card" href="https://zheninghuang.github.io/" target="_blank" rel="noopener">
+        <div class="team-photo"><img src="./team/zhening-huang.jpg" alt="Zhening Huang"></div>
+        <div class="team-name">Zhening Huang</div>
+        <div class="team-role">Cambridge · Adobe<sup>†</sup></div>
+      </a>
+      <a class="team-card" href="https://hyeonho99.github.io/" target="_blank" rel="noopener">
+        <div class="team-photo"><img src="./team/hyeonho-jeong.jpg" alt="Hyeonho Jeong"></div>
+        <div class="team-name">Hyeonho Jeong</div>
+        <div class="team-role">Adobe</div>
+      </a>
+      <a class="team-card" href="https://xuelin-chen.github.io/" target="_blank" rel="noopener">
+        <div class="team-photo"><img src="./team/xuelin-chen.jpg" alt="Xuelin Chen"></div>
+        <div class="team-name">Xuelin Chen</div>
+        <div class="team-role">Adobe</div>
+      </a>
+      <a class="team-card" href="https://research.adobe.com/person/yulia-gryaditskaya/" target="_blank" rel="noopener">
+        <div class="team-photo"><img src="./team/yulia-gryaditskaya.jpg" alt="Yulia Gryaditskaya"></div>
+        <div class="team-name">Yulia Gryaditskaya</div>
+        <div class="team-role">Adobe</div>
+      </a>
+      <a class="team-card" href="https://tuanfeng.github.io/" target="_blank" rel="noopener">
+        <div class="team-photo"><img src="./team/tuanfeng-wang.jpg" alt="Tuanfeng Y. Wang"></div>
+        <div class="team-name">Tuanfeng Y. Wang</div>
+        <div class="team-role">Adobe</div>
+      </a>
+      <a class="team-card" href="https://www.eng.cam.ac.uk/profiles/jl221" target="_blank" rel="noopener">
+        <div class="team-photo"><img src="./team/joan-lasenby.jpg" alt="Joan Lasenby"></div>
+        <div class="team-name">Joan Lasenby</div>
+        <div class="team-role">Cambridge</div>
+      </a>
+      <a class="team-card" href="https://research.adobe.com/person/paulchhuang/" target="_blank" rel="noopener">
+        <div class="team-photo"><img src="./team/chun-hao-huang.jpg" alt="Chun-Hao Huang"></div>
+        <div class="team-name">Chun-Hao Huang</div>
+        <div class="team-role">Adobe</div>
+      </a>
+    </div>
+    <p class="fade" style="text-align:center; margin-top:24px; font-size:13px; color:var(--muted);">
+      <sup>†</sup> Work done during internship at Adobe.
+    </p>
+  </div>
+</section>
+
+<!-- DATASET REQUEST -->
+<section id="download" style="background: var(--surface); border-top: 1px solid var(--border);">
+  <div class="paper fade" style="text-align:center;">
+    <div class="sec-num" style="text-align:center">Dataset Access</div>
+    <h2>Request the Dataset</h2>
+    <p class="lead" style="max-width:640px; margin: 0 auto 32px;">
+      The full SpaceTimePilot CamXTime dataset is available for academic and research use.
+      Please complete the request form below and we will follow up with download instructions.
+      For the parent project, see
+      <a href="https://zheninghuang.github.io/Space-Time-Pilot/" target="_blank" rel="noopener" style="color: var(--cyan); text-decoration: underline;">SpaceTimePilot</a>.
+    </p>
+    <a class="btn-primary" href="https://forms.office.com/r/TxKWUazrr8" target="_blank" rel="noopener">
+      Fill out the request form →
+    </a>
+    <p style="margin-top: 18px; font-size: 13px; color: var(--muted);">
+      forms.office.com/r/TxKWUazrr8
+    </p>
+    <p style="margin-top: 28px; font-size: 14px; color: var(--muted); max-width: 640px; margin-left: auto; margin-right: auto;">
+      For any questions, please reach out to
+      <a href="mailto:huangzhening@gmail.com" style="color: var(--cyan); text-decoration: underline;">Zhening Huang</a>
+      (huangzhening@gmail.com) or
+      <a href="mailto:chunhaoh@adobe.com" style="color: var(--cyan); text-decoration: underline;">Chunhao Huang</a>
+      (chunhaoh@adobe.com).
+    </p>
+  </div>
+</section>
+
+<!-- CITATION -->
+<section id="citation">
+  <div class="paper fade">
+    <div class="sec-num">Citation</div>
+    <h2>Cite this work</h2>
+    <p class="lead" style="margin-bottom: 24px;">
+      The CamXTime dataset is part of the
+      <a href="https://zheninghuang.github.io/Space-Time-Pilot/" target="_blank" rel="noopener" style="color: var(--cyan); text-decoration: underline;">SpaceTimePilot</a>
+      project. If you use the dataset in your research, please cite:
+    </p>
+    <pre style="
+      background: var(--surface2, #0f1729);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 20px 24px;
+      font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.65;
+      color: var(--text);
+      overflow-x: auto;
+      white-space: pre;
+      margin: 0;
+    ">@inproceedings{huang2026spacetimepilot,
+      title={SpaceTimePilot: Generative Rendering of Dynamic Scenes Across Space and Time},
+      author={Zhening Huang and Hyeonho Jeong and Xuelin Chen and Yulia Gryaditskaya and Tuanfeng Y. Wang and Joan Lasenby and Chun-Hao Huang},
+      booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+      year={2026},
+}</pre>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <span class="foot-logo">CamXTime</span>
+  <p>744 train scenes · 32 val scenes · 4 trajectories per train scene · 120 videos per trajectory · 360,960 rendered videos · 541 GB</p>
+  <p style="margin-top: 8px; font-size: 13px;">Part of the
+    <a href="https://zheninghuang.github.io/Space-Time-Pilot/" target="_blank" rel="noopener" style="color: var(--cyan); text-decoration: underline;">SpaceTimePilot</a> project
+  </p>
+</footer>
+
+<script>
+// ═══════════════════════════════════════════════════
+// DATA
+// ═══════════════════════════════════════════════════
+const S3 = '.';
+
+const SELECTED = [
+  'Scene007','Scene019','Scene028','Scene041','Scene043','Scene050','Scene053','Scene057',
+  'Scene060','Scene086','Scene096','Scene119','Scene130','Scene136','Scene161','Scene209',
+  'Scene213','Scene215','Scene241','Scene246','Scene260','Scene290','Scene323','Scene342',
+  'Scene344','Scene392','Scene401','Scene409','Scene490','Scene491','Scene492','Scene504',
+  'Scene513','Scene514','Scene524','Scene538','Scene539','Scene551','Scene553','Scene559',
+  'Scene606','Scene629','Scene654','Scene713','Scene715','Scene716','Scene717','Scene722',
+  'Scene723','Scene724','Scene733',
+];
+
+const EXP_SCENES = [
+  { id:'Scene007', label:'Scene 007', trajs:['01'] },
+  { id:'Scene050', label:'Scene 050', trajs:['01'] },
+  { id:'Scene260', label:'Scene 260', trajs:['01'] },
+  { id:'Scene491', label:'Scene 491', trajs:['01'] },
+];
+
+const CAM_STEPS = [10, 25, 40, 55, 70, 85, 100, 115];
+
+function url(scene, traj, cam) {
+  return `${S3}/${scene}/camera-trajectory-${String(traj).padStart(2,'0')}/cam${String(cam).padStart(3,'0')}_full_motion.mp4`;
+}
+
+// ═══════════════════════════════════════════════════
+// HERO GRID — 6x3 tiles, each a different merged.mp4, played at 2x
+// ═══════════════════════════════════════════════════
+const HERO_MERGED = [
+  'scene007_traj04', 'scene028_traj02', 'scene043_traj01',
+  'scene050_traj01', 'scene053_traj01', 'scene057_traj01', 'scene086_traj01',
+  'scene130_traj03', 'scene260_traj01', 'scene323_traj02', 'scene409_traj01',
+  'scene490_traj04', 'scene491_traj04', 'scene492_traj02', 'scene504_traj01',
+  'scene514_traj04', 'scene538_traj01', 'scene559_traj04',
+];
+
+(function buildHero() {
+  const grid = document.getElementById('heroGrid');
+  const shuffled = [...HERO_MERGED].sort(() => Math.random() - 0.5);
+
+  // One tile gets a caption overlay (preview of phase annotation).
+  // Use the master tile (index 0) so the caption tracks its own currentTime exactly.
+  const ANNOTATED_INDEX = 0;
+  let captionEl = null;
+
+  const videos = shuffled.map((name, i) => {
+    const v = document.createElement('video');
+    v.src = `${S3}/merged/${name}.mp4`;
+    v.muted = true;
+    v.loop = true;            // each video loops on its own
+    v.playsInline = true;
+    v.preload = 'auto';
+    v.playbackRate = 2.0;
+
+    if (i === ANNOTATED_INDEX) {
+      const tile = document.createElement('div');
+      tile.className = 'hero-tile';
+      tile.appendChild(v);
+      const cap = document.createElement('div');
+      cap.className = 'hero-tile-caption';
+      cap.innerHTML = `
+        <div class="phase">—</div>
+        <div class="desc">—</div>
+        <div class="ind">
+          <span>📷 <span class="arr cam">·</span></span>
+          <span>⏱ <span class="arr tim">·</span></span>
+        </div>`;
+      tile.appendChild(cap);
+      grid.appendChild(tile);
+      captionEl = cap;
+    } else {
+      grid.appendChild(v);
+    }
+    return v;
+  });
+
+  // Phase definitions match merged.mp4 = clip1 + clip2 + clip3 (each ~4s, total ~12s).
+  //   clip1: cam fixed,  time forward   → "Normal Playback"
+  //   clip2: cam moving, time backward  → "Rewind Sweep"
+  //   clip3: cam moving, time frozen    → "Bullet Time"
+  const PHASES = [
+    { phase: 'Normal Playback', desc: 'time forward · camera static',  cam: '·',  tim: '▶' },
+    { phase: 'Rewind Sweep',    desc: 'time backward · camera moving', cam: '▶',  tim: '◀' },
+    { phase: 'Bullet Time',     desc: 'time frozen · camera moving',   cam: '▶',  tim: '⏸' },
+  ];
+  function updateCaption(master) {
+    if (!captionEl || !master.duration) return;
+    const third = master.duration / 3;
+    const idx = Math.min(2, Math.floor(master.currentTime / third));
+    const p = PHASES[idx];
+    const phaseEl = captionEl.querySelector('.phase');
+    if (phaseEl.textContent !== p.phase) {
+      phaseEl.textContent = p.phase;
+      captionEl.querySelector('.desc').textContent = p.desc;
+      captionEl.querySelector('.cam').textContent = p.cam;
+      captionEl.querySelector('.tim').textContent = p.tim;
+    }
+  }
+
+  // Sync: wait until every tile is buffered, then play them all together.
+  // To prevent drift, periodically snap any tile that has wandered more than
+  // 0.25s away from the master back to the master's time.
+  Promise.all(videos.map(v => new Promise(res => {
+    if (v.readyState >= 3) res();
+    else v.addEventListener('canplaythrough', () => res(), { once: true });
+  }))).then(() => {
+    videos.forEach(v => { v.currentTime = 0; v.playbackRate = 2.0; });
+    Promise.all(videos.map(v => v.play().catch(() => {})));
+
+    const master = videos[0];
+    const dur = master.duration || 12;
+
+    // Drift watchdog — runs every 800ms.
+    setInterval(() => {
+      const t = master.currentTime;
+      for (let i = 1; i < videos.length; i++) {
+        const v = videos[i];
+        // Compute shortest signed distance accounting for loop wrap-around.
+        let diff = v.currentTime - t;
+        if (diff >  dur/2) diff -= dur;
+        if (diff < -dur/2) diff += dur;
+        if (Math.abs(diff) > 0.25) v.currentTime = t;
+      }
+    }, 800);
+
+    // Caption updater — drives the annotated tile from master.currentTime.
+    (function tickCaption() {
+      updateCaption(master);
+      requestAnimationFrame(tickCaption);
+    })();
+  });
+})();
+
+// ═══════════════════════════════════════════════════
+// CONCEPT GRID — phased animation on canvas
+// Phase 1: Camera trajectory definition (rows light up top-to-bottom)
+// Phase 2: Time-step rendering (cells fill row-by-row, left-to-right)
+// Phase 3: Bullet time sweep (highlight column = time slice)
+// Phase 4: Time warp sweep (highlight row = camera slice)
+// ═══════════════════════════════════════════════════
+(function buildConcept() {
+  const canvas  = document.getElementById('conceptCanvas');
+  const caption = document.getElementById('conceptCaption');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+
+  const ROWS = 6, COLS = 14;     // 6 cam poses, 14 time steps for visual
+  const TILE = 160;              // source tile size in the sprite sheet
+  let dpr = 1, W = 0, H = 0;
+
+  // Real Scene 057 footage sprite — 6 cams × 14 time steps, 160px tiles
+  const sprite = new Image();
+  sprite.crossOrigin = 'anonymous';
+  let spriteReady = false;
+  sprite.onload = () => { spriteReady = true; };
+  sprite.src = `${S3}/concept/scene057_grid.jpg`;
+
+  function resize() {
+    dpr = window.devicePixelRatio || 1;
+    const r = canvas.getBoundingClientRect();
+    canvas.width  = r.width  * dpr;
+    canvas.height = r.height * dpr;
+    W = r.width; H = r.height;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  new ResizeObserver(resize).observe(canvas);
+  resize();
+
+  // Phase durations (ms)
+  const PH1 = 1800;   // trajectory definition (rows light up top-to-bottom)
+  const PH2 = 4200;   // rendering — entire row lights up at once per pose
+  const HOLD = 1500;  // hold full grid before looping
+  const TOTAL = PH1 + PH2 + HOLD;
+
+  let t0 = performance.now();
+
+  function lerp(a,b,t){return a+(b-a)*t;}
+  function clamp01(x){return Math.max(0,Math.min(1,x));}
+
+  function draw() {
+    const elapsed = (performance.now() - t0) % TOTAL;
+    const cap = (W < 500) ? 0 : 1;
+
+    ctx.clearRect(0,0,W,H);
+
+    // Layout
+    const padL = 78 * cap + (cap?0:48);
+    const padR = 24, padT = 28, padB = 38;
+    const gridW = W - padL - padR;
+    const gridH = H - padT - padB;
+    const cw = gridW / COLS, ch = gridH / ROWS;
+
+    // ── Static frame: axis labels ──
+    ctx.font = '600 11px Inter, system-ui';
+    ctx.fillStyle = 'rgba(129,140,248,.85)';
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    if (cap) ctx.fillText('CAMERA POSE', padL - 12, padT + gridH/2);
+    ctx.save();
+    ctx.translate(padL - 50, padT + gridH/2);
+    ctx.rotate(-Math.PI/2);
+    ctx.restore();
+
+    ctx.fillStyle = 'rgba(34,211,238,.85)';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.fillText('TIME STEP →', padL + gridW/2, padT + gridH + 14);
+
+    // Determine animation state
+    let phase, p;     // p = 0..1 within phase
+    if (elapsed < PH1) { phase = 1; p = elapsed / PH1; }
+    else if (elapsed < PH1+PH2) { phase = 2; p = (elapsed-PH1) / PH2; }
+    else { phase = 3; p = 1; }
+
+    const captions = {
+      1: '① Define camera trajectory',
+      2: '② Render full motion at every camera pose',
+      3: '✓ Full 4D grid complete',
+    };
+    caption.textContent = captions[phase];
+
+    // ── Camera trajectory marker (left side) ──
+    const trajX = padL - 18;
+    const camPoseProgress = phase === 1 ? p : 1;       // active in phase 1
+    const camPoseCount = Math.ceil(camPoseProgress * ROWS);
+
+    // trajectory line
+    if (camPoseCount > 0) {
+      ctx.strokeStyle = 'rgba(129,140,248,.5)';
+      ctx.lineWidth = 2; ctx.lineCap = 'round';
+      ctx.beginPath();
+      for (let r = 0; r < camPoseCount; r++) {
+        const y = padT + (r + 0.5) * ch;
+        const x = trajX + Math.sin(r * 0.6) * 6;
+        if (r === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    // camera pose dots
+    for (let r = 0; r < camPoseCount; r++) {
+      const y = padT + (r + 0.5) * ch;
+      const x = trajX + Math.sin(r * 0.6) * 6;
+      const fade = phase === 1 ? Math.min(1, (camPoseProgress * ROWS - r) * 2) : 1;
+      ctx.fillStyle = `rgba(129,140,248,${0.85 * fade})`;
+      ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI*2); ctx.fill();
+      ctx.strokeStyle = `rgba(199,210,254,${0.5 * fade})`;
+      ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI*2); ctx.stroke();
+    }
+
+    // ── Grid cells ──
+    const gap = 3;
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const x = padL + c*cw + gap/2;
+        const y = padT + r*ch + gap/2;
+        const w = cw - gap, h = ch - gap;
+
+        // Default: empty cell
+        ctx.fillStyle = 'rgba(255,255,255,0.025)';
+        ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+        ctx.lineWidth = 1;
+        roundRect(x, y, w, h, 3); ctx.fill(); ctx.stroke();
+
+        // Phase 1: row activates (camera pose defined) — light indigo
+        if (phase >= 1) {
+          const rowActive = phase === 1
+            ? r < Math.floor(p * ROWS) || (r === Math.floor(p * ROWS) && (p*ROWS - r) > 0.3)
+            : true;
+          if (rowActive && phase === 1) {
+            ctx.fillStyle = 'rgba(129,140,248,.12)';
+            ctx.strokeStyle = 'rgba(129,140,248,.35)';
+            roundRect(x, y, w, h, 3); ctx.fill(); ctx.stroke();
+          }
+        }
+
+        // Phase 2: rows render as a whole — for each camera pose,
+        // ALL time steps light up at the same instant.
+        if (phase >= 2) {
+          // Each row gets an equal slice of phase 2's progress
+          const slot = p * ROWS;
+          const rowsRendered = Math.floor(slot);
+          const intoRow = slot - rowsRendered;            // 0..1 within current row
+          const rowDone = phase > 2 || r < rowsRendered;
+          const rowAppearing = phase === 2 && r === rowsRendered;
+
+          if (rowDone) {
+            ctx.fillStyle = 'rgba(34,211,238,.2)';
+            ctx.strokeStyle = 'rgba(34,211,238,.45)';
+            roundRect(x, y, w, h, 3); ctx.fill(); ctx.stroke();
+          } else if (rowAppearing) {
+            // Whole row pulses on simultaneously
+            const pulse = Math.min(1, intoRow * 3);        // ramp in over first third
+            ctx.fillStyle = `rgba(34,211,238,${0.2 + 0.35*(1-pulse)})`;
+            ctx.strokeStyle = `rgba(34,211,238,${0.45 + 0.5*(1-pulse)})`;
+            roundRect(x, y, w, h, 3); ctx.fill(); ctx.stroke();
+          }
+        }
+      }
+    }
+
+    requestAnimationFrame(draw);
+  }
+
+  function roundRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x+r, y);
+    ctx.lineTo(x+w-r, y);   ctx.quadraticCurveTo(x+w, y, x+w, y+r);
+    ctx.lineTo(x+w, y+h-r); ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+    ctx.lineTo(x+r, y+h);   ctx.quadraticCurveTo(x, y+h, x, y+h-r);
+    ctx.lineTo(x, y+r);     ctx.quadraticCurveTo(x, y, x+r, y);
+    ctx.closePath();
+  }
+
+  // Start animation when section in view
+  const obs = new IntersectionObserver(entries => {
+    if (entries[0].isIntersecting) {
+      t0 = performance.now();
+      requestAnimationFrame(draw);
+      obs.disconnect();
+    }
+  }, { threshold: 0.15 });
+  obs.observe(canvas);
+})();
+
+
+// INTERACTIVE EXPLORER — 40x40 grid, sprite strips drawn to canvas
+(function buildExplorer() {
+  const N_CAM    = 40;
+  const N_TIME   = 40;
+  const TILE     = 270;            // px per frame in the strip
+  const PLAY_FPS = 30;
+
+  let sceneIdx = 0, trajIdx = 0;
+  let path = [], isDrawing = true, isPlaying = false;
+  let playTick = null;
+  let curCi = 20, curFi = 20;       // current cell (camera_idx, time_idx)
+
+  // Strip images, indexed by camera index. Each entry is an HTMLImageElement
+  // containing a horizontal strip of 40 frames.
+  let strips = new Array(N_CAM).fill(null);
+  let stripsLoaded = 0;
+  let cancelToken = 0;
+
+  // RAF batching for canvas redraw
+  let pendingX = 0.5, pendingY = 0.5, posRaf = false;
+  let pathRafPending = false, pathHlIdx = -1;
+
+  const frameBox    = document.getElementById('expFrameBox');
+  const frameCanvas = document.getElementById('frameCanvas');
+  const fctx        = frameCanvas.getContext('2d');
+  const loader      = document.getElementById('frameLoader');
+  const loaderFill  = document.getElementById('frameLoaderFill');
+  const loaderCount = document.getElementById('frameLoaderCount');
+  const camBadge    = document.getElementById('expCamBadge');
+  const timeBadge   = document.getElementById('expTimeBadge');
+  const padOuter    = document.getElementById('padOuter');
+  const padCanvas   = document.getElementById('padCanvas');
+  const pctx        = padCanvas.getContext('2d');
+  const cursor      = document.getElementById('padCursor');
+  const drawBtn     = document.getElementById('drawBtn');
+  const clearBtn    = document.getElementById('clearBtn');
+  const playBtn     = document.getElementById('playBtn');
+
+  function sc() { return EXP_SCENES[sceneIdx]; }
+
+  // Cam position number (1..120) given index 0..N_CAM-1
+  function camPosFromIdx(ci) { return Math.round(ci * 119 / (N_CAM - 1)) + 1; }
+  // Time frame number (1..120) given index 0..N_TIME-1
+  function timeFrameFromIdx(fi) { return Math.round(fi * 119 / (N_TIME - 1)) + 1; }
+
+  function quantize(x, y) {
+    return {
+      fi: Math.round(Math.max(0, Math.min(1, x)) * (N_TIME - 1)),
+      ci: Math.round(Math.max(0, Math.min(1, y)) * (N_CAM - 1)),
+    };
+  }
+
+  function resizeCanvases() {
+    const dpr = window.devicePixelRatio || 1;
+    // Frame canvas
+    const fr = frameBox.getBoundingClientRect();
+    frameCanvas.width  = fr.width  * dpr;
+    frameCanvas.height = fr.height * dpr;
+    fctx.setTransform(dpr,0,0,dpr,0,0);
+    drawCurrent();
+    // Pad canvas
+    const pr = padOuter.getBoundingClientRect();
+    padCanvas.width  = pr.width  * dpr;
+    padCanvas.height = pr.height * dpr;
+    pctx.setTransform(dpr,0,0,dpr,0,0);
+    schedulePathRender(-1);
+  }
+
+  // ── Draw current frame from strip onto canvas ──
+  function drawCurrent() {
+    const r = frameBox.getBoundingClientRect();
+    const W = r.width, H = r.height;
+    const strip = strips[curCi];
+    fctx.fillStyle = '#000';
+    fctx.fillRect(0, 0, W, H);
+    if (!strip || !strip.complete || strip.naturalWidth === 0) return;
+    fctx.drawImage(
+      strip,
+      curFi * TILE, 0, TILE, TILE,    // src rect: one tile out of strip
+      0, 0, W, H                       // dest: fill canvas
+    );
+  }
+
+  function applyPos(x, y) {
+    const { fi, ci } = quantize(x, y);
+    curFi = fi; curCi = ci;
+    drawCurrent();
+    const cam = camPosFromIdx(ci);
+    camBadge.textContent  = 'cam' + String(cam).padStart(3, '0');
+    timeBadge.textContent = 't=' + String(timeFrameFromIdx(fi)).padStart(3, '0');
+    cursor.style.left = (x * 100) + '%';
+    cursor.style.top  = (y * 100) + '%';
+  }
+
+  function schedulePos(x, y) {
+    pendingX = x; pendingY = y;
+    if (posRaf) return;
+    posRaf = true;
+    requestAnimationFrame(() => { posRaf = false; applyPos(pendingX, pendingY); });
+  }
+
+  // ── Strip loading ──
+  function loadStrips() {
+    const myToken = ++cancelToken;
+    strips = new Array(N_CAM).fill(null);
+    stripsLoaded = 0;
+    loader.style.display = 'flex';
+    loaderFill.style.width = '0%';
+    loaderCount.textContent = `0 / ${N_CAM}`;
+
+    const traj = sc().trajs[trajIdx];
+    const sceneId = sc().id;
+
+    for (let ci = 0; ci < N_CAM; ci++) {
+      const cam = camPosFromIdx(ci);
+      const url = `${S3}/grid40_lo/${sceneId}/${traj}/cam${String(cam).padStart(3,'0')}.jpg`;
+      const img = new Image();
+      img.crossOrigin = 'anonymous';   // not strictly needed without canvas read
+      img.onload = img.onerror = () => {
+        if (myToken !== cancelToken) return;     // user switched scene/traj
+        if (img.naturalWidth > 0) strips[ci] = img;
+        stripsLoaded++;
+        const pct = (stripsLoaded / N_CAM * 100).toFixed(0);
+        loaderFill.style.width = pct + '%';
+        loaderCount.textContent = `${stripsLoaded} / ${N_CAM}`;
+        // Draw as soon as the current camera's strip arrives
+        if (strips[curCi] && img === strips[curCi]) drawCurrent();
+        if (stripsLoaded >= N_CAM) {
+          loader.style.display = 'none';
+          drawCurrent();
+        }
+      };
+      img.src = url;
+      // Intentionally not crossOrigin to avoid CORS preflight; canvas is OK to be tainted
+      // because we never call toDataURL/getImageData on frameCanvas.
+      img.removeAttribute('crossorigin');
+    }
+  }
+
+  // ── Pad rendering (drawn path + grid backdrop) ──
+  function schedulePathRender(hlIdx) {
+    pathHlIdx = hlIdx;
+    if (pathRafPending) return;
+    pathRafPending = true;
+    requestAnimationFrame(() => { pathRafPending = false; renderPath(pathHlIdx); });
+  }
+
+  function renderPath(hlIdx) {
+    const r = padOuter.getBoundingClientRect();
+    const W = r.width, H = r.height;
+    pctx.clearRect(0, 0, W, H);
+
+    // Subtle 4x4 grid lines
+    pctx.strokeStyle = 'rgba(255,255,255,0.05)';
+    pctx.lineWidth = 1;
+    for (let i = 1; i <= 3; i++) {
+      pctx.beginPath(); pctx.moveTo(W*i/4, 0); pctx.lineTo(W*i/4, H); pctx.stroke();
+      pctx.beginPath(); pctx.moveTo(0, H*i/4); pctx.lineTo(W, H*i/4); pctx.stroke();
+    }
+    if (path.length < 2) return;
+
+    pctx.lineWidth = 2.5;
+    pctx.lineCap = 'round'; pctx.lineJoin = 'round';
+    for (let i = 1; i < path.length; i++) {
+      const t = i / path.length;
+      const r1 = Math.round(34 + t*(129-34));
+      const g1 = Math.round(211 - t*(211-140));
+      const b1 = Math.round(238 - t*(238-248));
+      pctx.strokeStyle = `rgba(${r1},${g1},${b1},0.85)`;
+      pctx.beginPath();
+      pctx.moveTo(path[i-1].x*W, path[i-1].y*H);
+      pctx.lineTo(path[i].x*W,   path[i].y*H);
+      pctx.stroke();
+    }
+
+    // Start marker (S, cyan)
+    {
+      const p = path[0];
+      pctx.fillStyle = 'rgba(34,211,238,.95)';
+      pctx.beginPath(); pctx.arc(p.x*W, p.y*H, 8, 0, Math.PI*2); pctx.fill();
+      pctx.fillStyle = '#001017';
+      pctx.font = 'bold 11px Inter, system-ui';
+      pctx.textAlign = 'center'; pctx.textBaseline = 'middle';
+      pctx.fillText('S', p.x*W, p.y*H + 0.5);
+    }
+    // End marker (E, indigo)
+    {
+      const p = path[path.length - 1];
+      pctx.fillStyle = 'rgba(129,140,248,.95)';
+      pctx.beginPath(); pctx.arc(p.x*W, p.y*H, 8, 0, Math.PI*2); pctx.fill();
+      pctx.fillStyle = '#0a0a1a';
+      pctx.font = 'bold 11px Inter, system-ui';
+      pctx.textAlign = 'center'; pctx.textBaseline = 'middle';
+      pctx.fillText('E', p.x*W, p.y*H + 0.5);
+    }
+
+    if (hlIdx >= 0 && hlIdx < path.length) {
+      const p = path[hlIdx];
+      pctx.fillStyle = 'rgba(255,255,255,.95)';
+      pctx.beginPath(); pctx.arc(p.x*W, p.y*H, 7, 0, Math.PI*2); pctx.fill();
+      pctx.fillStyle = 'rgba(34,211,238,.3)';
+      pctx.beginPath(); pctx.arc(p.x*W, p.y*H, 16, 0, Math.PI*2); pctx.fill();
+    }
+  }
+
+  // ── Pad input ──
+  const getPos = (e) => {
+    const r = padOuter.getBoundingClientRect();
+    const ev = e.touches ? e.touches[0] : e;
+    return {
+      x: Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width)),
+      y: Math.max(0, Math.min(1, (ev.clientY - r.top)  / r.height)),
+    };
+  };
+
+  padOuter.addEventListener('mousedown', e => {
+    const {x,y} = getPos(e);
+    if (isDrawing) { stopPlay(); path = []; path.push({x,y}); schedulePathRender(-1); }
+    schedulePos(x,y);
+  });
+  padOuter.addEventListener('mousemove', e => {
+    const {x,y} = getPos(e);
+    schedulePos(x,y);
+    if (isDrawing && e.buttons === 1) {
+      const last = path[path.length - 1];
+      if (!last || Math.hypot(x-last.x, y-last.y) > 0.008) {
+        path.push({x,y}); schedulePathRender(-1);
+      }
+    }
+  });
+  padOuter.addEventListener('touchstart', e => {
+    e.preventDefault();
+    const {x,y} = getPos(e);
+    if (isDrawing) { stopPlay(); path = []; path.push({x,y}); schedulePathRender(-1); }
+    schedulePos(x,y);
+  }, { passive: false });
+  padOuter.addEventListener('touchmove', e => {
+    e.preventDefault();
+    const {x,y} = getPos(e);
+    schedulePos(x,y);
+    if (isDrawing) {
+      const last = path[path.length - 1];
+      if (!last || Math.hypot(x-last.x, y-last.y) > 0.008) {
+        path.push({x,y}); schedulePathRender(-1);
+      }
+    }
+  }, { passive: false });
+
+  // ── Predefined patterns ──
+  function makePattern(fn, N=120) {
+    return Array.from({length:N}, (_,i) => {
+      const t = i/(N-1), p = fn(t);
+      return { x: Math.max(.005, Math.min(.995, p.x)),
+               y: Math.max(.005, Math.min(.995, p.y)) };
+    });
+  }
+  function makeRandom() {
+    const pts = [];
+    let x = 0.05 + Math.random()*.1;
+    let y = 0.2 + Math.random()*.6;
+    for (let i = 0; i < 120; i++) {
+      x = Math.max(.02, Math.min(.98, x + 0.0083 + Math.random()*.005));
+      y = Math.max(.02, Math.min(.98, y + (Math.random()-.5)*.15));
+      pts.push({x, y});
+    }
+    return pts;
+  }
+  // x = time (0..1), y = camera (0..1). All paths produce ~120 path points.
+  const PATS = {
+    // Forward — both time and camera advance together
+    forward: () => makePattern(t => ({ x: t, y: t })),
+
+    // Slow motion — time covers half range while camera goes full
+    slow:    () => makePattern(t => ({ x: t * 0.5, y: t })),
+
+    // Bullet time — time frozen mid-clip, camera sweeps full range
+    bullet:  () => makePattern(t => ({ x: 0.5, y: t })),
+
+    // Fast motion (2×) — time covers full range while camera goes half,
+    // then time runs back to zero while camera goes to full
+    fast: () => makePattern(t => {
+      if (t < 0.5) {
+        const k = t / 0.5;                       // 0 → 1
+        return { x: k,        y: k * 0.5 };      // time 0→1, cam 0→0.5
+      } else {
+        const k = (t - 0.5) / 0.5;               // 0 → 1
+        return { x: 1.0 - k,  y: 0.5 + k * 0.5 };// time 1→0, cam 0.5→1
+      }
+    }),
+
+    // Forward · Bullet · Forward
+    //   seg 1 (fwd):    cam 0→1/3,   time 0→1/3
+    //   seg 2 (bullet): cam 1/3→2/3, time frozen at 1/3
+    //   seg 3 (fwd):    cam 2/3→1,   time 1/3→2/3
+    fwdBullet: () => makePattern(t => {
+      if (t < 1/3) {
+        const k = t / (1/3);                     // 0 → 1
+        return { x: k / 3,            y: k / 3 };
+      } else if (t < 2/3) {
+        const k = (t - 1/3) / (1/3);             // 0 → 1
+        return { x: 1/3,              y: 1/3 + k / 3 };
+      } else {
+        const k = (t - 2/3) / (1/3);             // 0 → 1
+        return { x: 1/3 + k / 3,      y: 2/3 + k / 3 };
+      }
+    }),
+
+    // Zigzag — diagonal time with oscillating camera
+    zigzag: () => makePattern(t => ({ x: t, y: 0.5 + 0.45*Math.sin(t*Math.PI*5) })),
+  };
+  document.querySelectorAll('.pat-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.pat-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      stopPlay();
+      path = PATS[btn.dataset.pat]();
+      schedulePathRender(-1);
+      if (path.length) applyPos(path[0].x, path[0].y);
+    });
+  });
+
+  // ── Action buttons ──
+  drawBtn.addEventListener('click', () => {
+    isDrawing = !isDrawing;
+    drawBtn.textContent = isDrawing ? '✏ Drawing' : '✏ Draw';
+    drawBtn.classList.toggle('active', isDrawing);
+    padOuter.style.cursor = isDrawing ? 'crosshair' : 'pointer';
+  });
+  clearBtn.addEventListener('click', () => {
+    stopPlay(); path = []; schedulePathRender(-1);
+    document.querySelectorAll('.pat-btn').forEach(b => b.classList.remove('active'));
+  });
+
+  playBtn.addEventListener('click', () => {
+    if (isPlaying) { stopPlay(); return; }
+    if (path.length < 2) return;
+    startPlay();
+  });
+
+  function startPlay() {
+    // Upsample the user's path to a fixed number of frames for smooth 30fps
+    const N = Math.max(60, Math.min(120, path.length));
+    const seq = Array.from({length: N}, (_, i) => {
+      const raw = (i/(N-1)) * (path.length - 1);
+      const lo = Math.floor(raw), hi = Math.min(lo + 1, path.length - 1);
+      const f = raw - lo;
+      return { x: path[lo].x*(1-f) + path[hi].x*f,
+               y: path[lo].y*(1-f) + path[hi].y*f };
+    });
+
+    isPlaying = true;
+    playBtn.textContent = '⏸ Stop';
+    playBtn.classList.remove('accent');
+    playBtn.classList.add('active');
+
+    const frameMs = 1000 / PLAY_FPS;
+    const startT = performance.now();
+
+    function step() {
+      if (!isPlaying) return;
+      const elapsed = performance.now() - startT;
+      const idx = Math.floor(elapsed / frameMs);
+      if (idx >= seq.length) { stopPlay(); return; }
+      const { x, y } = seq[idx];
+      applyPos(x, y);
+      schedulePathRender(Math.floor(idx / seq.length * path.length));
+      playTick = requestAnimationFrame(step);
+    }
+    playTick = requestAnimationFrame(step);
+  }
+  function stopPlay() {
+    isPlaying = false;
+    if (playTick) cancelAnimationFrame(playTick);
+    playTick = null;
+    playBtn.textContent = '▶ Play Path';
+    playBtn.classList.remove('active');
+    playBtn.classList.add('accent');
+    schedulePathRender(-1);
+  }
+
+  // ── Scene / traj selectors ──
+  const sceneCont = document.getElementById('expScenes');
+  EXP_SCENES.forEach((sc, i) => {
+    const p = document.createElement('div');
+    p.className = 'pill' + (i === 0 ? ' sel' : '');
+    p.textContent = sc.label;
+    p.onclick = () => {
+      sceneCont.querySelectorAll('.pill').forEach(x => x.classList.remove('sel'));
+      p.classList.add('sel');
+      sceneIdx = i; trajIdx = 0;
+      buildTrajs(); loadStrips();
+    };
+    sceneCont.appendChild(p);
+  });
+
+  function buildTrajs() {
+    const c = document.getElementById('expTrajs');
+    const group = document.getElementById('expTrajGroup');
+    c.innerHTML = '';
+    const trajs = sc().trajs;
+    if (group) group.style.display = trajs.length > 1 ? '' : 'none';
+    trajs.forEach((t, i) => {
+      const b = document.createElement('div');
+      b.className = 'traj-b' + (i === 0 ? ' sel' : '');
+      b.textContent = `Camera ${i + 1}`;
+      b.onclick = () => {
+        c.querySelectorAll('.traj-b').forEach(x => x.classList.remove('sel'));
+        b.classList.add('sel');
+        trajIdx = i;
+        loadStrips();
+      };
+      c.appendChild(b);
+    });
+  }
+  buildTrajs();
+
+  // ── Init ──
+  new ResizeObserver(resizeCanvases).observe(frameBox);
+  new ResizeObserver(resizeCanvases).observe(padOuter);
+  resizeCanvases();
+
+  const obs = new IntersectionObserver(entries => {
+    if (entries[0].isIntersecting) { loadStrips(); obs.disconnect(); }
+  }, { threshold: 0.05 });
+  obs.observe(document.getElementById('explorer'));
+})();
+
+// MARQUEE GALLERY
+// All videos in a row share a master clock so they advance through the
+// 4-second pattern in lock-step. A drift watchdog snaps any tile that
+// wanders >0.2s away from its row master back into sync.
+//
+// When a tab is clicked we swap every <video>.src to the new pattern.
+// To make that swap feel instant we pre-warm the HTTP cache for the
+// other 5 patterns in the background once the page is up.
+// ═══════════════════════════════════════════════════
+(function buildMarquee() {
+  const wrap = document.getElementById('marqueeWrap');
+  const tabs = document.getElementById('galleryTabs');
+
+  const n = SELECTED.length;
+  const q1 = Math.ceil(n/4), q2 = Math.ceil(2*n/4), q3 = Math.ceil(3*n/4);
+  const ROW_DEFS = [
+    { scenes: SELECTED.slice(0,  q1), rev: false },
+    { scenes: SELECTED.slice(q1, q2), rev: true  },
+    { scenes: SELECTED.slice(q2, q3), rev: false },
+    { scenes: SELECTED.slice(q3),     rev: true  },
+  ];
+  const ALL_PATS = ['forward','slow','bullet','fast','fwdBullet','zigzag'];
+  const CLIP_DUR = 4.0;            // seconds — every pattern clip is 4s @ 30fps
+
+  function patUrl(scene, pat) {
+    return `${S3}/marquee_patterns/${scene}_${pat}.mp4`;
+  }
+
+  // Build cells. Each row's videos array is captured for sync logic.
+  const rowVideos = [];
+  ROW_DEFS.forEach(({ scenes, rev }) => {
+    const row = document.createElement('div');
+    row.className = 'marquee-row' + (rev ? ' rev' : '');
+    const track = document.createElement('div');
+    track.className = 'marquee-track';
+    const vids = [];
+    [...scenes, ...scenes].forEach(s => {
+      const cell = document.createElement('div');
+      cell.className = 'marquee-cell';
+      const v = document.createElement('video');
+      v.dataset.scene = s;
+      v.loop = true; v.muted = true; v.playsInline = true; v.preload = 'none';
+      cell.appendChild(v);
+      track.appendChild(cell);
+      vids.push(v);
+    });
+    row.appendChild(track);
+    wrap.appendChild(row);
+    rowVideos.push(vids);
+  });
+
+  let currentPat = 'forward';
+  let inView = false;
+
+  // ── Sync ─────────────────────────────────────────────────────────────
+  // After every video in a row reports canplay, snap them to t=0 and start
+  // them on the same animation frame. The drift watchdog (one global
+  // setInterval) re-snaps stragglers every 800ms.
+  function syncRow(vids) {
+    Promise.all(vids.map(v => new Promise(res => {
+      if (v.readyState >= 2) return res();
+      const onReady = () => { v.removeEventListener('loadeddata', onReady); res(); };
+      v.addEventListener('loadeddata', onReady);
+      // Timeout fallback so a single slow video doesn't block the whole row
+      setTimeout(res, 4000);
+    }))).then(() => {
+      requestAnimationFrame(() => {
+        vids.forEach(v => { try { v.currentTime = 0; } catch {} });
+        vids.forEach(v => v.play().catch(() => {}));
+      });
+    });
+  }
+
+  let driftTimer = null;
+  function startDriftWatchdog() {
+    if (driftTimer) return;
+    driftTimer = setInterval(() => {
+      rowVideos.forEach(vids => {
+        const m = vids[0];
+        if (!m || m.readyState < 2 || isNaN(m.duration)) return;
+        const t = m.currentTime;
+        for (let i = 1; i < vids.length; i++) {
+          const v = vids[i];
+          if (v.readyState < 2 || isNaN(v.duration)) continue;
+          let diff = v.currentTime - t;
+          if (diff >  CLIP_DUR/2) diff -= CLIP_DUR;
+          if (diff < -CLIP_DUR/2) diff += CLIP_DUR;
+          if (Math.abs(diff) > 0.2) { try { v.currentTime = t; } catch {} }
+        }
+      });
+    }, 800);
+  }
+
+  // ── Pattern switching ────────────────────────────────────────────────
+  function applyPattern(pat) {
+    currentPat = pat;
+    rowVideos.forEach(vids => {
+      vids.forEach(v => {
+        const newSrc = patUrl(v.dataset.scene, pat);
+        if (v.src.endsWith(`/${v.dataset.scene}_${pat}.mp4`)) return;
+        v.preload = inView ? 'auto' : 'none';
+        v.src = newSrc;                   // browser will hit cache if pre-warmed
+      });
+      if (inView) syncRow(vids);
+    });
+  }
+
+  tabs.querySelectorAll('.gallery-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.dataset.pat === currentPat) return;
+      tabs.querySelectorAll('.gallery-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      applyPattern(btn.dataset.pat);
+    });
+  });
+
+  // ── HTTP-cache prefetch for the other patterns ───────────────────────
+  // Once the active pattern is up and playing, walk through the other
+  // five patterns in the background and download each scene's clip just
+  // far enough that the browser stores it in its HTTP cache. A subsequent
+  // <video>.src = ... assignment then resolves locally.
+  const prefetched = new Set();
+  async function prefetchPattern(pat) {
+    if (prefetched.has(pat)) return;
+    prefetched.add(pat);
+    // Fetch in parallel batches of 6 to be polite to other traffic.
+    const BATCH = 6;
+    for (let i = 0; i < SELECTED.length; i += BATCH) {
+      const slice = SELECTED.slice(i, i + BATCH);
+      await Promise.all(slice.map(s =>
+        fetch(patUrl(s, pat), { cache: 'force-cache' })
+          .then(r => r.blob())              // consume body so it lands in cache
+          .catch(() => {})
+      ));
+    }
+  }
+  async function backgroundPrefetch() {
+    // Defer briefly so the active pattern dominates initial bandwidth
+    await new Promise(res => setTimeout(res, 1500));
+    for (const pat of ALL_PATS) {
+      if (pat === currentPat) continue;
+      await prefetchPattern(pat);
+    }
+  }
+
+  // ── Boot ─────────────────────────────────────────────────────────────
+  const galleryObs = new IntersectionObserver(entries => {
+    if (!entries[0].isIntersecting) return;
+    inView = true;
+    applyPattern(currentPat);
+    startDriftWatchdog();
+    backgroundPrefetch();
+    galleryObs.disconnect();
+  }, { threshold: 0.05 });
+  galleryObs.observe(document.getElementById('gallery'));
+})();
+
+// ═══════════════════════════════════════════════════
+// SCENE MATRIX — expandable cards, each shows a 4×6 grid
+// (4 trajectories × 6 rendering patterns) of synced 4-second loops.
+// Videos are lazy-loaded only when a card is opened, and the card
+// thumb is lazy-loaded on first scroll into view.
+// ═══════════════════════════════════════════════════
+(function buildMatrix() {
+  const list = document.getElementById('matrixList');
+  if (!list) return;
+
+  const PATTERNS = [
+    { id: 'forward',   label: '⏱ Forward'  },
+    { id: 'slow',      label: '⏱ Slow'     },
+    { id: 'bullet',    label: '⏱ Bullet'   },
+    { id: 'fast',      label: '⏱ Fast'     },
+    { id: 'fwdBullet', label: '⏱ Fwd·Bul'  },
+    { id: 'zigzag',    label: '📷 Cam Zigzag', accent: 'red' },
+  ];
+  const TRAJS = ['01', '02', '03', '04'];
+  const CLIP_DUR = 4.0;
+  const CLIP_MS  = CLIP_DUR * 1000;
+
+  const SCENES = [
+    { id: 'Scene553', label: 'Scene 553' },
+    { id: 'Scene057', label: 'Scene 057' },
+    { id: 'Scene019', label: 'Scene 019' },
+  ];
+
+  // traj 01 keeps the legacy {scene}_{pat}.mp4 name; traj 02-04 use _trajNN_
+  function urlFor(scene, traj, pat) {
+    if (traj === '01') return `${S3}/marquee_patterns/${scene}_${pat}.mp4`;
+    return `${S3}/marquee_patterns/${scene}_traj${traj}_${pat}.mp4`;
+  }
+
+  // ── Global wall-clock sync ────────────────────────────────────────
+  // Every visible matrix video aligns to (performance.now() % 4000)/1000.
+  // No master/slave — all cards share one timeline, so even when multiple
+  // are open the 4-second loops stay phase-locked.
+  const activeVideos = new Set();
+  function targetTime() { return (performance.now() % CLIP_MS) / 1000; }
+  function snap(v) {
+    if (v.readyState < 2 || isNaN(v.duration)) return;
+    const t = targetTime();
+    let diff = v.currentTime - t;
+    if (diff >  CLIP_DUR / 2) diff -= CLIP_DUR;
+    if (diff < -CLIP_DUR / 2) diff += CLIP_DUR;
+    if (Math.abs(diff) > 0.15) { try { v.currentTime = t; } catch {} }
+  }
+  setInterval(() => { activeVideos.forEach(snap); }, 600);
+
+  SCENES.forEach((scene, idx) => {
+    const card = document.createElement('article');
+    card.className = 'matrix-card';
+
+    // ── Head (always visible) ───────────────────────────────────────
+    const head = document.createElement('div');
+    head.className = 'matrix-head';
+
+    const thumb = document.createElement('div');
+    thumb.className = 'matrix-thumb';
+    const tv = document.createElement('video');
+    tv.muted = true; tv.loop = true; tv.playsInline = true; tv.preload = 'none';
+    tv.dataset.src = urlFor(scene.id, '01', 'forward');
+    thumb.appendChild(tv);
+
+    const meta = document.createElement('div');
+    meta.className = 'matrix-meta';
+    meta.innerHTML =
+      `<h3>${scene.label}</h3>` +
+      `<p class="matrix-sub">4 trajectories × 6 renderings · 24 clips</p>` +
+      `<div class="matrix-tags">` +
+        `<span class="matrix-tag">4 trajectories</span>` +
+        `<span class="matrix-tag cyan">6 renderings</span>` +
+      `</div>`;
+
+    const toggle = document.createElement('button');
+    toggle.className = 'matrix-toggle';
+    toggle.type = 'button';
+    toggle.innerHTML = 'View matrix <span class="arrow">▾</span>';
+
+    head.appendChild(thumb);
+    head.appendChild(meta);
+    head.appendChild(toggle);
+
+    // ── Body (collapsed by default) ─────────────────────────────────
+    const body = document.createElement('div');
+    body.className = 'matrix-body';
+    const inner = document.createElement('div');
+    inner.className = 'matrix-body-inner';
+    const grid = document.createElement('div');
+    grid.className = 'matrix-grid';
+
+    // Header row: corner + 4 trajectory column headers
+    const corner = document.createElement('div');
+    corner.className = 'matrix-corner';
+    grid.appendChild(corner);
+    TRAJS.forEach(t => {
+      const h = document.createElement('div');
+      h.className = 'matrix-col-h';
+      h.textContent = `📷 Traj ${parseInt(t, 10)}`;
+      grid.appendChild(h);
+    });
+
+    // 6 pattern rows × 4 trajectory cells
+    const cellVideos = [];
+    PATTERNS.forEach(p => {
+      const rh = document.createElement('div');
+      rh.className = 'matrix-row-h' + (p.accent ? ` matrix-row-h--${p.accent}` : '');
+      rh.textContent = p.label;
+      grid.appendChild(rh);
+      TRAJS.forEach(t => {
+        const cell = document.createElement('div');
+        cell.className = 'matrix-cell' + (p.accent ? ` matrix-cell--${p.accent}` : '');
+        const v = document.createElement('video');
+        v.muted = true; v.loop = true; v.playsInline = true; v.preload = 'none';
+        v.dataset.src = urlFor(scene.id, t, p.id);
+        v.addEventListener('error', () => cell.classList.add('missing'));
+        cell.appendChild(v);
+        grid.appendChild(cell);
+        cellVideos.push(v);
+      });
+    });
+
+    inner.appendChild(grid);
+    body.appendChild(inner);
+    card.appendChild(head);
+    card.appendChild(body);
+    list.appendChild(card);
+
+    // ── Expand / collapse ──────────────────────────────────────────
+    // On expand: load each video, register it for global sync, snap
+    // it to the global wall-clock the moment it has data, then play.
+    function expand() {
+      card.classList.add('open');
+      cellVideos.forEach(v => {
+        activeVideos.add(v);
+        if (!v.src) { v.preload = 'auto'; v.src = v.dataset.src; }
+        const start = () => { snap(v); v.play().catch(() => {}); };
+        if (v.readyState >= 2) start();
+        else v.addEventListener('loadeddata', start, { once: true });
+      });
+    }
+    function collapse() {
+      card.classList.remove('open');
+      cellVideos.forEach(v => { v.pause(); activeVideos.delete(v); });
+    }
+    head.addEventListener('click', () => {
+      if (card.classList.contains('open')) collapse(); else expand();
+    });
+
+    // ── Lazy-load the head thumbnail when the card scrolls into view ──
+    const thumbObs = new IntersectionObserver(entries => {
+      if (!entries[0].isIntersecting) return;
+      tv.preload = 'auto';
+      tv.src = tv.dataset.src;
+      tv.play().catch(() => {});
+      thumbObs.disconnect();
+    }, { threshold: 0.2 });
+    thumbObs.observe(card);
+
+    // First card is open by default; the rest stay collapsed until tapped.
+    if (idx === 0) requestAnimationFrame(expand);
+  });
+})();
+
+// ═══════════════════════════════════════════════════
+// FADE-IN
+// ═══════════════════════════════════════════════════
+(function initFade() {
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) { e.target.classList.add('in'); obs.unobserve(e.target); }
+    });
+  }, { threshold: 0.08 });
+  document.querySelectorAll('.fade').forEach(el => obs.observe(el));
+})();
+</script>
+</body>
+</html>
