@@ -1118,17 +1118,14 @@
     <div class="sec-num" style="text-align:center">Dataset Access</div>
     <h2>Request the Dataset</h2>
     <p class="lead" style="max-width:640px; margin: 0 auto 32px;">
-      The full SpaceTimePilot CamXTime dataset is available for academic and research use.
-      Please complete the request form below and we will follow up with download instructions.
+      The full SpaceTimePilot CamXTime dataset is rendered on request.
+      Please complete the form below and we will follow up with download instructions.
       For the parent project, see
       <a href="https://zheninghuang.github.io/Space-Time-Pilot/" target="_blank" rel="noopener" style="color: var(--cyan); text-decoration: underline;">SpaceTimePilot</a>.
     </p>
     <a class="btn-primary" href="https://forms.office.com/r/TxKWUazrr8" target="_blank" rel="noopener">
       Fill out the request form →
     </a>
-    <p style="margin-top: 18px; font-size: 13px; color: var(--muted);">
-      forms.office.com/r/TxKWUazrr8
-    </p>
     <p style="margin-top: 28px; font-size: 14px; color: var(--muted); max-width: 640px; margin-left: auto; margin-right: auto;">
       For any questions, please reach out to
       <a href="mailto:huangzhening@gmail.com" style="color: var(--cyan); text-decoration: underline;">Zhening Huang</a>
@@ -1174,8 +1171,8 @@
 <footer>
   <span class="foot-logo">CamXTime</span>
   <p>744 train scenes · 32 val scenes · 4 trajectories per train scene · 120 videos per trajectory · 360,960 rendered videos · 541 GB</p>
-  <p style="margin-top: 8px; font-size: 13px;">Part of the
-    <a href="https://zheninghuang.github.io/Space-Time-Pilot/" target="_blank" rel="noopener" style="color: var(--cyan); text-decoration: underline;">SpaceTimePilot</a> project
+  <p style="margin-top: 8px; font-size: 13px;">
+    <a href="https://zheninghuang.github.io/Space-Time-Pilot/" target="_blank" rel="noopener" style="color: var(--cyan); text-decoration: underline;">SpaceTimePilot</a> team
   </p>
 </footer>
 
@@ -1621,7 +1618,7 @@ const HERO_MERGED = [
 
     for (let ci = 0; ci < N_CAM; ci++) {
       const cam = camPosFromIdx(ci);
-      const url = `${S3}/grid40_lo/${sceneId}/${traj}/cam${String(cam).padStart(3,'0')}.jpg`;
+      const url = `${S3}/grid40/${sceneId}/${traj}/cam${String(cam).padStart(3,'0')}.jpg`;
       const img = new Image();
       img.crossOrigin = 'anonymous';   // not strictly needed without canvas read
       img.onload = img.onerror = () => {
